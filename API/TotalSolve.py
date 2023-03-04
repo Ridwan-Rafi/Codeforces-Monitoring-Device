@@ -10,12 +10,10 @@ def isValid(creationTime):
     return True
   return False
 def cfSolveCount(handle):
-  print(handle)
   totalSolve = set()
   contestRanks = requests.get('https://codeforces.com/api/user.status?handle='+handle)
   sj = json.loads(contestRanks.content)
   submissions = sj['result']
-
   for sub in submissions:
     if 'verdict' not in sub: continue
     if(sub['verdict']=='OK' ):
@@ -26,5 +24,4 @@ def cfSolveCount(handle):
       else:
         return len(totalSolve)
   return len(totalSolve)
-
 
