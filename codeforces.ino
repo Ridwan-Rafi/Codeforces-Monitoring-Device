@@ -25,24 +25,34 @@ U8G2_SH1106_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/SCL, /* data=*/SDA, 
 //#include <ESP8266HTTPClient.h>
 #include <ArduinoJson.h>
 
-//custom Header file
-#include "setupCF.h"
-#include "bootLogo.h"
-#include "timeStamp.h"
-#include "targetUpdt.h"
-
 //IP Address and MAC
 IPAddress ip;
 char IP[17];
 String mac;
 
-//Setup web server at 80 port
-ESP8266WebServer webserver(80);
-
 //Global User name of Codeforces and target
 String cfID = String('~');
 int cfTarget = -1;
 int baki = -1;
+uint8_t target=0, pre=-1;
+
+#define Button1 D3
+#define Button2 D4
+#define Button3 D8
+bool bt1, bt2, bt3, ok;
+
+//custom Header file
+//#include "setupCF.h"
+#include "bootLogo.h"
+//#include "timeStamp.h"
+#include "targetUpdt.h"
+
+
+
+
+//Setup web server at 80 port
+ESP8266WebServer webserver(80);
+
 
 
 //Web Page for Username input
@@ -138,12 +148,13 @@ void connectToWiFi() {
 }
 void welcome() {
   u8g2.clearBuffer();
+  u8g2.drawStr(40,10,"Welcome");
   char tmpID[100];
   cfID.toCharArray(tmpID, 100);
   u8g2.drawStr(20, 30, tmpID);
   u8g2.sendBuffer();
+  delay(1000);
 }
-
 
 
 
@@ -172,7 +183,7 @@ void cfUser() {
 void getTarget() {
   targetSetup();
   targetDisp();
-  cfTarget = target;
+  
 }
 void firebaseSetup() {
   Firebase.begin(FIREBASE_HOST, FIREBASE_AUTH);
@@ -186,13 +197,15 @@ void firebaseSetup() {
     u8g2.sendBuffer();
     u8g2.drawStr(0, 30, "*Check your Internet");
     u8g2.sendBuffer();
-  } 
-  else {
+  } else {
     Serial.println("Firebase connected");
     Serial.println(mac);
     String name = Firebase.getString("/User/" + mac);
+    delay(50);
     int trgt = Firebase.getInt("/Limit/" + mac);
-    if (Firebase.success() && name.length()!=0) {
+    delay(50);
+
+    if (Firebase.success() && name.length() != 0) {
       Serial.println("Old User");
       cfID = name;
       cfTarget = trgt;
@@ -218,13 +231,41 @@ void firebaseSetup() {
   }
 }
 
-int prebaki = -1000000;
-void todaySolved() {
-  int todaySolved = Firebase.getInt("/TodaySolve/" + mac);
-  Serial.println("Target=" + String(cfTarget) + "    Today solve" + String(todaySolved));
-  baki = cfTarget - todaySolved;
+void resetting()
+{
+  cfID="~";  
+  Serial.println("New User");
+      //Username input
+      u8g2.clearBuffer();
+      cfUser();
+      delay(1000);
+      getTarget();
+      //String logs;
+      Serial.println("New user name = " + cfID);
+      Firebase.setString("/User/" + mac, cfID);
+      delay(50);
+      Firebase.setInt("/Limit/" + mac, cfTarget);
+      //Serial.println(logs);
+      if (!Firebase.success()) {
+        u8g2.clearBuffer();
+        u8g2.drawStr(0, 0, "Something went wrong");
+      } else {
+        welcome();
+      }
+}
 
-  if (prebaki != baki) {
+int prebaki = -1000000, todaySolve=0;
+void todaySolved() {
+ todaySolve = Firebase.getInt("/TodaySolve/" + mac);
+ if(Firebase.success()){
+  Serial.println("Target=" + String(cfTarget) + "    Today solve" + String(todaySolve));
+  baki = cfTarget - todaySolve;
+if(ok==1)
+{
+  prebaki=-1000000;
+  ok=0;
+}
+  if (prebaki != baki ) {
     u8g2.clearBuffer();
     if (baki < 0) {
       u8g2.drawStr(0, 0, "Extra Solved ");
@@ -238,149 +279,43 @@ void todaySolved() {
     u8g2.sendBuffer();
     prebaki = baki;
   }
+ }
+ else{
+   u8g2.drawStr(20,55,"No Internet");
+   u8g2.sendBuffer();
+ }
 }
 
-// Codeforces url for connecting
-#define TEST_HOST "codeforces.com"
-// OPTIONAL - The finferprint of the site you want to connec
-//D1:40:5B:67:17:F5:21:9E:4D:C0:52:B6:BA:96:81:0A:7F:8B:13:DA
-#define TEST_HOST_FINGERPRINT "D1 40 5B 67 17 F5 21 9E 4D C0 52 B6 BA 96 81 0A 7F 8B 13 DA"
-// The finger print will change every few months.
-
-void getJson() {
-  //check fingerprint
-  client.setFingerprint(TEST_HOST_FINGERPRINT);
-
-  // Opening connection to server (Use 80 as port if HTTP)
-  if (!client.connect(TEST_HOST, 443)) {
-    Serial.println(F("64->Connection failed"));
-    return;
-  } else Serial.println(F("67->Connection successfull"));
-
-  // give the esp a breather
-  yield();
-
-
-  // Send HTTP request
-  client.print(F("GET "));
-  // This is the second half of a request (everything that comes after the base URL)
-  client.print("/api/user.status?handle=" + cfID + "&from=1&count=1");  // %2C == ,
-
-  // HTTP 1.0 is ideal as the response wont be chunked
-  // But some API will return 1.1 regardless, so we need
-  // to handle both.
-  client.println(F(" HTTP/1.1"));
-
-  //Headers
-  client.print(F("Host: "));
-  client.println(TEST_HOST);
-
-  client.println(F("Cache-Control: no-cache"));
-
-  if (client.println() == 0) {
-    Serial.println(F("Failed to send request"));
-    return;
-  } else Serial.println(F("Request sended to host"));
-  //delay(100);
-  // Check HTTP status
-  char http_status[32] = { 0 };
-  client.readBytesUntil('\r', http_status, sizeof(http_status));
-  Serial.println(http_status);
-  // Check if it responded "OK" with either HTTP 1.0 or 1.1
-  if (strcmp(http_status, "HTTP/1.1 200 ") != 0) {
-    Serial.print(F("Unexpected response: "));
-    Serial.println(http_status);
-    return;
+void reset() {
+  u8g2.clear();
+  u8g2.drawStr(20, 0, "Do you want to");
+  u8g2.drawStr(40, 10, "reset?");
+  u8g2.setFont(u8g2_font_helvR08_tr);
+  u8g2.drawButtonUTF8(20, 48, U8G2_BTN_HCENTER | U8G2_BTN_BW2, 34, 2, 2, "Yes");
+  u8g2.drawButtonUTF8(90, 48, U8G2_BTN_HCENTER | U8G2_BTN_BW2, 34, 2, 2, "No");
+  u8g2.sendBuffer();
+  u8g2.setFont(u8g2_font_6x10_tf);
+  delay(100);
+  Serial.println("reset oled printed");
+  while (1) {
+    if (digitalRead(Button1)==HIGH) {
+      delay(100);
+      return;
+    }
+    else if (digitalRead(Button2)==HIGH) {
+      delay(100);
+      resetting();
+      return;
+    }
+    delay(2);
   }
-
-  // Skip HTTP headers
-  char endOfHeaders[] = "\r\n\r\n";
-  if (!client.find(endOfHeaders)) {
-    Serial.println(F("Invalid response"));
-    return;
-  }
-
-  // For APIs that respond with HTTP/1.1 we need to remove
-  // the chunked data length values at the start of the body
-  //
-  // peek() will look at the character, but not take it off the queue
-  while (client.available() && client.peek() != '{' && client.peek() != '[') {
-    char c = 0;
-    client.readBytes(&c, 1);
-    Serial.print(c);
-    Serial.println("BAD");
-  }
-
-  // While the client is still availble read each
-  // byte and print to the serial monitor
-  char json_data[1000];
-  int data_size = 0;
-  while (client.available()) {
-    char c = 0;
-    client.readBytes(&c, 1);
-    //Serial.print(c);
-    json_data[data_size++] = c;
-  }
-  json_data[data_size] = '\0';
-
-  Serial.println(json_data);
-
-  const size_t capacity = 2 * JSON_ARRAY_SIZE(1) + JSON_ARRAY_SIZE(3) + JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(2) + JSON_OBJECT_SIZE(5) + JSON_OBJECT_SIZE(6) + JSON_OBJECT_SIZE(12) + 510;
-  DynamicJsonBuffer jsonBuffer(capacity);
-
-  const char* json = json_data;  //Json data
-
-  JsonObject& root = jsonBuffer.parseObject(json);
-
-  const char* status = root["status"];  // "OK"
-
-  JsonObject& result_0 = root["result"][0];
-  long result_0_id = result_0["id"];                                    // 193893475
-  int result_0_contestId = result_0["contestId"];                       // 1795
-  long result_0_creationTimeSeconds = result_0["creationTimeSeconds"];  // 1676563521
-  int result_0_relativeTimeSeconds = result_0["relativeTimeSeconds"];   // 5421
-
-  JsonObject& result_0_problem = result_0["problem"];
-  int result_0_problem_contestId = result_0_problem["contestId"];  // 1795
-  const char* result_0_problem_index = result_0_problem["index"];  // "B"
-  const char* result_0_problem_name = result_0_problem["name"];    // "Ideal Point"
-  const char* result_0_problem_type = result_0_problem["type"];    // "PROGRAMMING"
-  int result_0_problem_rating = result_0_problem["rating"];        // 900
-
-  JsonArray& result_0_problem_tags = result_0_problem["tags"];
-  const char* result_0_problem_tags_0 = result_0_problem_tags[0];  // "brute force"
-  const char* result_0_problem_tags_1 = result_0_problem_tags[1];  // "geometry"
-  const char* result_0_problem_tags_2 = result_0_problem_tags[2];  // "greedy"
-
-  JsonObject& result_0_author = result_0["author"];
-  int result_0_author_contestId = result_0_author["contestId"];  // 1795
-
-  const char* result_0_author_members_0_handle = result_0_author["members"][0]["handle"];  // "Ridwan_Islam"
-
-  const char* result_0_author_participantType = result_0_author["participantType"];  // "CONTESTANT"
-  bool result_0_author_ghost = result_0_author["ghost"];                             // false
-  long result_0_author_startTimeSeconds = result_0_author["startTimeSeconds"];       // 1676558100
-
-  const char* result_0_programmingLanguage = result_0["programmingLanguage"];  // "GNU C++17"
-  const char* result_0_verdict = result_0["verdict"];                          // "WRONG_ANSWER"
-  const char* result_0_testset = result_0["testset"];                          // "TESTS"
-  int result_0_passedTestCount = result_0["passedTestCount"];                  // 0
-  int result_0_timeConsumedMillis = result_0["timeConsumedMillis"];            // 0
-  int result_0_memoryConsumedBytes = result_0["memoryConsumedBytes"];          // 0
-
-  //.................. Json parsing end..........
-
-  Serial.println("Json parsing successfull");
-  Serial.print("status= ");
-  Serial.println(status);
-  Serial.print("Verdict= ");
-  Serial.println(result_0_verdict);
-  String date = timeStamp(result_0_creationTimeSeconds);
-  Serial.println(date);
 }
 
 void setup() {
   Serial.begin(9600);
+  pinMode(Button1, INPUT);
+  pinMode(Button2, INPUT);
+  pinMode(Button3, INPUT);
   mac = WiFi.macAddress();
   //Display preparing
   u8g2.begin();
@@ -399,8 +334,28 @@ void setup() {
   delay(3000);
   firebaseSetup();
 }
+int step;
 
 void loop() {
-  delay(5000);
+  step = 3000;
+  bt3 = LOW, bt1 = LOW;
+  while (step-- && bt1==LOW && bt3==LOW) {
+    bt1 = digitalRead(Button1);
+    bt3 = digitalRead(Button3);
+    delay(1);
+  }
+  Serial.println("Bt1=" + String(bt1) + "  Bt2=" + String(bt2) + "  Bt3=" + String(bt3));
+  delay(100);
+  
+  if (bt3 == HIGH) {
+    reset();
+    delay(100);
+    Serial.println("Bt1=" + String(bt1) + "  Bt2=" + String(bt2) + "  Bt3=" + String(bt3));
+    delay(1000);
+  }
+  else if (bt1 == HIGH) {
+    getTarget();
+  }
+
   todaySolved();
 }
