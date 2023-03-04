@@ -70,16 +70,17 @@ ft = tkFont.Font(family='Times',size=10)
 GMessage_981["font"] = ft
 GMessage_981["fg"] = "#333333"
 GMessage_981["justify"] = "center"
-GMessage_981["text"] = "Built by : Iftekhar Ahamed Siddiquee"
-GMessage_981.place(x=20,y=320,width=233,height=50)
+GMessage_981["text"] = "Built by :\nIftekhar Ahamed Siddiquee\nand\nMd.Redoan"
+GMessage_981.place(x=20,y=320,width=233,height=70)
 
-GMessage_246=tk.Message(win)
+GMessage_246=tk.Message(win,)
 ft = tkFont.Font(family='Times',size=10)
 GMessage_246["font"] = ft
 GMessage_246["fg"] = "#333333"
 GMessage_246["justify"] = "center"
-GMessage_246["text"] = "iftekharahamed56@gmail.com"
-GMessage_246.place(x=390,y=320,width=90,height=45)
+GMessage_246["text"] = "iftekharahamed56@gmail.com\nredoanislamputu1@gmail.com"
+GMessage_246["width"]= 170.0
+GMessage_246.place(x=350,y=320,width=170,height=65)
 
 
 # Run a function to print text in window
