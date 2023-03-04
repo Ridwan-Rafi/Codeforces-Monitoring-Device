@@ -32,9 +32,9 @@ String mac;
 
 //Global User name of Codeforces and target
 String cfID = String('~');
-int cfTarget = -1;
+int cfTarget = -1, valid = -1;
 int baki = -1;
-uint8_t target=0, pre=-1;
+uint8_t target = 0, pre = -1;
 
 #define Button1 D3
 #define Button2 D4
@@ -148,7 +148,7 @@ void connectToWiFi() {
 }
 void welcome() {
   u8g2.clearBuffer();
-  u8g2.drawStr(40,10,"Welcome");
+  u8g2.drawStr(40, 10, "Welcome");
   char tmpID[100];
   cfID.toCharArray(tmpID, 100);
   u8g2.drawStr(20, 30, tmpID);
@@ -157,6 +157,35 @@ void welcome() {
 }
 
 
+int isValid() {
+  Firebase.setInt("/Valid/" + mac, -1);
+  delay(70);
+  u8g2.clearBuffer();
+  u8g2.drawStr(45, 20, "Username is");
+  u8g2.drawStr(40, 30, "Checking...");
+  u8g2.sendBuffer();
+  Serial.println("Valid user name cheking checking");
+
+  if (Firebase.success()) {
+    while (1) {
+      delay(80);
+      valid = Firebase.getInt("/Valid/" + mac);
+      delay(80);
+      Serial.println("Valid = " + String(valid));
+      if (Firebase.success()) {
+        if (valid == 1 || valid == 0) return valid;
+      } else {
+        Serial.println("Firebase failed");'
+        valid=-2;'
+        return -2;
+      }
+    }
+  } else {
+    Serial.println("Firebase failed");
+    valid=-2;
+    return -2;
+  }
+}
 
 void cfUser() {
   Serial.println("Cf user input");
@@ -178,13 +207,51 @@ void cfUser() {
     webserver.handleClient();
   }
   webserver.stop();
+  Firebase.begin(FIREBASE_HOST, FIREBASE_AUTH);
+  delay(50);
+  Firebase.setString("/User/" + mac, cfID);
+  delay(100);
+  while(!Firebase.success())
+  {
+    Serial.println("Sending user name to firebase");
+    Firebase.setString("/User/" + mac, cfID);
+  delay(50);
+  }
+
+  while (isValid() == 0 || valid == -2) {
+    cfID = "~";
+    if (valid == -2) {
+      u8g2.clearBuffer();
+      u8g2.drawStr(0, 0, "No internet");
+      u8g2.drawStr(0, 10, " wait..");
+    } else if (valid == 0) {
+      u8g2.clearBuffer();
+      u8g2.drawStr(0, 0, "Wrong username");
+      u8g2.drawStr(0, 10, "Insert again");
+      u8g2.drawStr(0, 20, "Visit this IP:");
+      u8g2.drawStr(0, 30, IP);
+    }
+    u8g2.sendBuffer();
+
+    webserver.begin();
+    Serial.println("Web server has started");
+    cfID="~";
+    while (cfID == String('~')) {
+      webserver.handleClient();
+    }
+    webserver.stop();
+
+    Firebase.setString("/User/" + mac, cfID);
+    Firebase.setInt("/Valid/"+mac,-1);
+    delay(50);
+  }
 }
 
 void getTarget() {
   targetSetup();
   targetDisp();
-  
 }
+
 void firebaseSetup() {
   Firebase.begin(FIREBASE_HOST, FIREBASE_AUTH);
   u8g2.clearBuffer();
@@ -200,10 +267,11 @@ void firebaseSetup() {
   } else {
     Serial.println("Firebase connected");
     Serial.println(mac);
-    String name = Firebase.getString("/User/" + mac);
-    delay(50);
+    String name ;
+    //name = Firebase.getString("/User/" + mac);
+    //delay(50);
     int trgt = Firebase.getInt("/Limit/" + mac);
-    delay(50);
+    delay(150);
 
     if (Firebase.success() && name.length() != 0) {
       Serial.println("Old User");
@@ -215,75 +283,76 @@ void firebaseSetup() {
       //Username input
       u8g2.clearBuffer();
       cfUser();
+      welcome();
       delay(1000);
       getTarget();
       //String logs;
       Firebase.setString("/User/" + mac, cfID);
+      delay(60);
       Firebase.setInt("/Limit/" + mac, cfTarget);
-      //Serial.println(logs);
-      if (!Firebase.success()) {
-        u8g2.clearBuffer();
-        u8g2.drawStr(0, 0, "Something went wrong");
-      } else {
-        welcome();
-      }
-    }
-  }
-}
-
-void resetting()
-{
-  cfID="~";  
-  Serial.println("New User");
-      //Username input
-      u8g2.clearBuffer();
-      cfUser();
-      delay(1000);
-      getTarget();
-      //String logs;
-      Serial.println("New user name = " + cfID);
-      Firebase.setString("/User/" + mac, cfID);
       delay(50);
-      Firebase.setInt("/Limit/" + mac, cfTarget);
       //Serial.println(logs);
       if (!Firebase.success()) {
         u8g2.clearBuffer();
         u8g2.drawStr(0, 0, "Something went wrong");
       } else {
-        welcome();
+        Serial.println("Data saved in Firebase ");
       }
+    }
+  }
 }
 
-int prebaki = -1000000, todaySolve=0;
-void todaySolved() {
- todaySolve = Firebase.getInt("/TodaySolve/" + mac);
- if(Firebase.success()){
-  Serial.println("Target=" + String(cfTarget) + "    Today solve" + String(todaySolve));
-  baki = cfTarget - todaySolve;
-if(ok==1)
-{
-  prebaki=-1000000;
-  ok=0;
-}
-  if (prebaki != baki ) {
+void resetting() {
+  cfID = "~";
+  Serial.println("New User");
+  //Username input
+  u8g2.clearBuffer();
+  cfUser();
+  delay(1000);
+  getTarget();
+  //String logs;
+  Serial.println("New user name = " + cfID);
+  Firebase.setString("/User/" + mac, cfID);
+  delay(50);
+  Firebase.setInt("/Limit/" + mac, cfTarget);
+  //Serial.println(logs);
+  if (!Firebase.success()) {
     u8g2.clearBuffer();
-    if (baki < 0) {
-      u8g2.drawStr(0, 0, "Extra Solved ");
-      u8g2.setCursor(75, 0);
-      u8g2.print(baki * (-1));
-    } else {
-      u8g2.drawStr(0, 0, "Remaining ");
-      u8g2.setCursor(70, 0);
-      u8g2.print(baki);
-    }
-    u8g2.sendBuffer();
-    prebaki = baki;
+    u8g2.drawStr(0, 0, "Something went wrong");
+  } else {
+    welcome();
   }
- }
- else{
-   u8g2.drawStr(20,55,"No Internet");
-   u8g2.sendBuffer();
- }
+}
+
+int prebaki = -1000000, todaySolve = 0;
+
+void todaySolved() {
+  todaySolve = Firebase.getInt("/TodaySolve/" + mac);
+  if (Firebase.success()) {
+    Serial.println("Target=" + String(cfTarget) + "    Today solve" + String(todaySolve));
+    baki = cfTarget - todaySolve;
+    if (ok == 1) {
+      prebaki = -1000000;
+      ok = 0;
+    }
+    if (prebaki != baki) {
+      u8g2.clearBuffer();
+      if (baki < 0) {
+        u8g2.drawStr(0, 0, "Extra Solved ");
+        u8g2.setCursor(75, 0);
+        u8g2.print(baki * (-1));
+      } else {
+        u8g2.drawStr(0, 0, "Remaining ");
+        u8g2.setCursor(70, 0);
+        u8g2.print(baki);
+      }
+      u8g2.sendBuffer();
+      prebaki = baki;
+    }
+  } else {
+    u8g2.drawStr(20, 55, "No Internet");
+    u8g2.sendBuffer();
+  }
 }
 
 void reset() {
@@ -298,11 +367,10 @@ void reset() {
   delay(100);
   Serial.println("reset oled printed");
   while (1) {
-    if (digitalRead(Button1)==HIGH) {
+    if (digitalRead(Button1) == HIGH) {
       delay(100);
       return;
-    }
-    else if (digitalRead(Button2)==HIGH) {
+    } else if (digitalRead(Button2) == HIGH) {
       delay(100);
       resetting();
       return;
@@ -339,21 +407,20 @@ int step;
 void loop() {
   step = 3000;
   bt3 = LOW, bt1 = LOW;
-  while (step-- && bt1==LOW && bt3==LOW) {
+  while (step-- && bt1 == LOW && bt3 == LOW) {
     bt1 = digitalRead(Button1);
     bt3 = digitalRead(Button3);
     delay(1);
   }
   Serial.println("Bt1=" + String(bt1) + "  Bt2=" + String(bt2) + "  Bt3=" + String(bt3));
   delay(100);
-  
+
   if (bt3 == HIGH) {
     reset();
     delay(100);
     Serial.println("Bt1=" + String(bt1) + "  Bt2=" + String(bt2) + "  Bt3=" + String(bt3));
-    delay(1000);
-  }
-  else if (bt1 == HIGH) {
+    delay(10000);
+  } else if (bt1 == HIGH) {
     getTarget();
   }
 
