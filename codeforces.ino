@@ -29,12 +29,14 @@ U8G2_SH1106_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/SCL, /* data=*/SDA, 
 IPAddress ip;
 char IP[17];
 String mac;
+String name ;
 
 //Global User name of Codeforces and target
 String cfID = String('~');
 int cfTarget = -1, valid = -1;
 int baki = -1;
 uint8_t target = 0, pre = -1;
+bool noInt=0;
 
 #define Button1 D3
 #define Button2 D4
@@ -160,23 +162,26 @@ void welcome() {
 int isValid() {
   Firebase.setInt("/Valid/" + mac, -1);
   delay(70);
-  u8g2.clearBuffer();
+  
+
+  if (Firebase.success()) {
+    u8g2.clearBuffer();
   u8g2.drawStr(45, 20, "Username is");
   u8g2.drawStr(40, 30, "Checking...");
   u8g2.sendBuffer();
   Serial.println("Valid user name cheking checking");
 
-  if (Firebase.success()) {
     while (1) {
       delay(80);
       valid = Firebase.getInt("/Valid/" + mac);
       delay(80);
       Serial.println("Valid = " + String(valid));
       if (Firebase.success()) {
+
         if (valid == 1 || valid == 0) return valid;
       } else {
-        Serial.println("Firebase failed");'
-        valid=-2;'
+        Serial.println("Firebase failed");
+        valid=-2;
         return -2;
       }
     }
@@ -224,6 +229,7 @@ void cfUser() {
       u8g2.clearBuffer();
       u8g2.drawStr(0, 0, "No internet");
       u8g2.drawStr(0, 10, " wait..");
+      continue;
     } else if (valid == 0) {
       u8g2.clearBuffer();
       u8g2.drawStr(0, 0, "Wrong username");
@@ -267,16 +273,28 @@ void firebaseSetup() {
   } else {
     Serial.println("Firebase connected");
     Serial.println(mac);
-    String name ;
     //name = Firebase.getString("/User/" + mac);
-    //delay(50);
-    int trgt = Firebase.getInt("/Limit/" + mac);
+    delay(50);
+    valid = Firebase.getInt("/Valid/" + mac);
     delay(150);
+    
+Serial.println("valid" + String(valid));
 
-    if (Firebase.success() && name.length() != 0) {
+  u8g2.clearBuffer();
+while(!Firebase.success())
+{
+  u8g2.drawStr(0,0,"No internet");
+  Serial.println("Firebase failed");
+u8g2.sendBuffer();
+delay(500);
+}
+    if (valid!=0 && valid!=-1) {
+      name = Firebase.getString("/User/" + mac);
+      delay(100);
       Serial.println("Old User");
       cfID = name;
-      cfTarget = trgt;
+      cfTarget = Firebase.getInt("/Limit/" + mac);
+      delay(100);
       welcome();
     } else {
       Serial.println("New User");
@@ -329,6 +347,10 @@ int prebaki = -1000000, todaySolve = 0;
 void todaySolved() {
   todaySolve = Firebase.getInt("/TodaySolve/" + mac);
   if (Firebase.success()) {
+    if(noInt==1){
+      noInt=0;
+      u8g2.clearBuffer();
+    }
     Serial.println("Target=" + String(cfTarget) + "    Today solve" + String(todaySolve));
     baki = cfTarget - todaySolve;
     if (ok == 1) {
@@ -351,6 +373,7 @@ void todaySolved() {
     }
   } else {
     u8g2.drawStr(20, 55, "No Internet");
+    noInt=1;
     u8g2.sendBuffer();
   }
 }
