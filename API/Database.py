@@ -31,6 +31,7 @@ def markValidUser():
         if (data != '*' and valid[data] ==-1):
             count = isValidUser(user[data])
             UpdateValidData(data, count)
+            print(data + " " + count)
         else:
             print(data+" ok")
 
